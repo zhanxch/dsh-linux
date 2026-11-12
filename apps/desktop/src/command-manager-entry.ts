@@ -1,5 +1,6 @@
 /** Private command-management worker; macOS mutation targets are fixed before elevation. */
 
+import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,8 +15,8 @@ if (process.platform === 'darwin') process.umask(0o022)
 try {
   if (!['inspect', 'install', 'remove'].includes(operation ?? '')) throw new CommandInstallationError('EINVAL', 'Invalid command-management operation.')
   if (operation !== 'inspect' && !/^[a-f0-9]{64}$/u.test(fingerprint)) throw new CommandInstallationError('EINVAL', 'Missing command confirmation.')
-  if (process.platform === 'darwin') {
-    const options = { destination: '/usr/local/bin/dsh', launcher: join(resources, 'runtime', 'cli', 'bin', 'dsh'),
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    const options = { destination: process.platform === 'linux' ? join(homedir(), '.local', 'bin', 'dsh') : '/usr/local/bin/dsh', launcher: join(resources, 'runtime', 'cli', 'bin', 'dsh'),
       linkHelper: join(resources, 'runtime', 'cli', 'link-entry') }
     const state = operation === 'inspect' ? await inspectFileCommand(options)
       : operation === 'install' ? await installFileCommand(options, fingerprint) : await removeFileCommand(options, fingerprint)
@@ -34,7 +35,7 @@ try {
     child.stdin.end(JSON.stringify({ operation, expected, directory: join(resources, 'runtime', 'cli', 'bin') }))
     process.exitCode = await exited ?? 1
   } else {
-    throw new CommandInstallationError('EUNSUPPORTED', 'Command installation is supported on macOS and Windows.')
+    throw new CommandInstallationError('EUNSUPPORTED', 'Command installation is supported on Linux, macOS and Windows.')
   }
 } catch (error) {
   // osascript preserves stdout only when the command exits successfully; the response owns operation failures.

@@ -65,6 +65,8 @@ The application menu's **Manage dsh Command…** entry, immediately below **Chec
 
 On macOS, installation creates `/usr/local/bin/dsh` and requests administrator authentication when the directory requires it. Shell startup files are unchanged. On Windows, the management dialog registers the command in the current user's PATH. A pre-existing command requires confirmation before switching; repairing Desktop's own selected command does not repeat that confirmation. The macOS link preserves and restores the displaced launcher; Windows preserves other PATH entries, including entries that predate registration. A command with higher PATH precedence is reported with its location. After moving the application, use Repair on macOS or Install from the new location on Windows. Remove leaves unrelated installations intact.
 
+On Linux, command installation uses `~/.local/bin/dsh` with the same ownership, backup, repair and removal checks as macOS, without administrator elevation. Add `~/.local/bin` to the shell PATH if needed. See the [Linux distribution guide](../../linux/README.md) for installation and update behavior.
+
 Command registration is optional after installing Desktop. Use **Manage dsh Command… → Remove** before uninstalling Desktop to remove its CLI registration; the application uninstaller does not remove it. Finish CLI commands before updating or uninstalling Desktop. The CLI runtime version follows the installed Desktop release. See [bundled command runtime](#bundled-command-runtime) for Desktop plugin commands and runtime limitations.
 
 <a id="closing-the-window-and-quitting"></a>

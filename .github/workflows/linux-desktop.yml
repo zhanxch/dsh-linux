@@ -1,0 +1,71 @@
+name: Linux desktop
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['linux-v*']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: linux-desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+jobs:
+  package:
+    if: github.repository == 'zhanxch/dsh-linux'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      DSH_GATE_CONCURRENCY: '2'
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Native build and desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 libgtk-3-0 libnss3 libasound2 libgbm1 xvfb
+          npm install --global pnpm@11.28.5
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Focused desktop tests
+        run: pnpm exec vitest run apps/desktop/tests/desktop-build-paths.spec.ts apps/desktop/tests/development-project.spec.ts apps/desktop/tests/command-installation.spec.ts apps/desktop/tests/desktop-cli.spec.ts apps/desktop/tests/linux-package.spec.ts apps/desktop/tests/platform-view.spec.ts packages/document/office-kit/tests/engine-package.spec.ts scripts/verify-repository-references.spec.ts
+      - name: Build desktop packages
+        run: pnpm run package:desktop:linux
+      - name: Build and test the optional Super-agent plugin
+        run: node apps/desktop/scripts/package-superagent.mjs
+      - name: Packaged runtime smoke
+        run: pnpm exec tsx apps/desktop/scripts/smoke-linux.ts
+      - name: Checksums
+        working-directory: apps/desktop/.desktop-build/targets/linux-x64/artifacts
+        run: sha256sum ./*.deb ./*.tar.gz ./*.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-linux-x64
+          path: |
+            apps/desktop/.desktop-build/targets/linux-x64/artifacts/*.deb
+            apps/desktop/.desktop-build/targets/linux-x64/artifacts/*.tar.gz
+            apps/desktop/.desktop-build/targets/linux-x64/artifacts/*.tgz
+            apps/desktop/.desktop-build/targets/linux-x64/artifacts/SHA256SUMS
+          if-no-files-found: error
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/linux-v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dsh-linux-x64
+          path: dist
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --prerelease --generate-notes dist/*

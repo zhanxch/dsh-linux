@@ -51,7 +51,9 @@ export function findRepositoryReferences(
     if (organizationUrl.test(canonicalReferenceText(line).replace(kitRepositoryUrl, ''))) {
       references.push({ file, line: index + 1, kind: 'organization-url' })
     }
-    if ([...line.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
+    // Reproducible Linux builds pin their two upstream sources in this machine-readable manifest.
+    const sourcePin = file === 'linux/release.json' && /^\s*"(?:upstreamCommit|commit)": "[a-f0-9]{40}",?\s*$/u.test(line)
+    if (!sourcePin && [...line.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
       references.push({ file, line: index + 1, kind: 'commit-hash' })
     }
   }

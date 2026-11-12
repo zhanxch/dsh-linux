@@ -73,6 +73,15 @@ describe('unique object-name prefix search', () => {
 })
 
 describe('maintained repository reference policy', () => {
+  it('allows full upstream pins only in the Linux build manifest fields', () => {
+    const commit = 'abcdef0123'.repeat(4)
+    const commits = new Set([commit])
+    const pin = `  "upstreamCommit": "${commit}",`
+    expect(findRepositoryReferences('linux/release.json', pin, commits)).toEqual([])
+    expect(findRepositoryReferences('linux/release.json', `    "commit": "${commit}"`, commits)).toEqual([])
+    expect(findRepositoryReferences('linux/README.md', pin, commits)).toHaveLength(1)
+    expect(findRepositoryReferences('linux/release.json', `  "comment": "${commit}"`, commits)).toHaveLength(1)
+  })
   const numericCommit = String(6_344_383)
 
   it.each([

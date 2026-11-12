@@ -8,6 +8,16 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
+<a id="linux-desktop-distribution"></a>
+
+## Linux 桌面发行版
+
+本仓库由 zhanxch 维护，基于官方 DSH 桌面应用制作 Linux 社区发行版，保留原有的会话界面、模式、插件和内置运行环境。这不是 DeepSeek 官方发布的二进制安装包。
+
+**[下载 Linux 桌面安装包](https://github.com/zhanxch/dsh-linux/releases)** · [安装与构建](linux/README.zh.md) · [Super-agent 集成说明](linux/superagent.md)
+
+源码版本固定记录在 [linux/release.json](linux/release.json)。Super-agent 是 DeepSeek 独立发布的研究原型，本发行版提供兼容补丁及可选插件包。
+
 ## 开发者预览
 
 DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**

@@ -45,13 +45,13 @@ afterEach(() => {
   state.views.length = 0; state.sessions.length = 0; state.loadFailure = undefined; state.loadBarrier = undefined
   vi.clearAllMocks(); vi.unstubAllEnvs()
 })
-function setup() {
+function setup(platform: 'darwin' | 'win32' | null = 'darwin') {
   let blocked = false
   const removeChildView = vi.fn()
   const owner = Object.assign(new EventEmitter(), {
     webContents: new EventEmitter(), contentView: { addChildView: vi.fn(), removeChildView }, isDestroyed: () => false,
   })
-  const manager = new DesktopPlatformView('/bundled/preload.cjs', () => 'en_US', 'darwin', () => blocked)
+  const manager = new DesktopPlatformView('/bundled/preload.cjs', () => 'en_US', platform, () => blocked)
   manager.setSession({ origin: 'https://platform.deepseek.com', userId: 'fixture-user' as AccountUserId, token: 'fixture-secret' })
   return { manager, owner, removeChildView, block: () => { blocked = true } }
 }
@@ -79,6 +79,15 @@ function view() {
     } }
 }
 const bounds = { x: 10, y: 20, width: 800, height: 600 }
+
+it('uses the supported web identity for Linux account requests', async () => {
+  const { manager, owner } = setup(null)
+  try {
+    await manager.open(owner, 'usage', bounds)
+    expect(interceptHeaders(1, 'https://platform.deepseek.com/api/user', {}))
+      .toMatchObject({ 'x-client-platform': 'web', 'x-client-version': '1.2.3' })
+  } finally { await manager.dispose() }
+})
 
 it('bootstraps only the owned main frame and never puts the token in a URL', async () => {
   const { manager, owner } = setup()

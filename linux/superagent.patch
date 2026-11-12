@@ -1,0 +1,196 @@
+diff --git a/src/app/http.ts b/src/app/http.ts
+index 13c0115..b21a447 100644
+--- a/src/app/http.ts
++++ b/src/app/http.ts
+@@ -237 +237 @@ export function registerHttp(ctx: Context, runtime: HttpHost): () => void {
+-      if (!sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }
++      if (ctx.webServer.port === undefined || !sameOrigin(req, ctx.webServer.port)) { json(res, 403, { error: 'Same-origin management request required' }); return }
+diff --git a/src/app/resources.ts b/src/app/resources.ts
+index f19f742..2dd50c3 100644
+--- a/src/app/resources.ts
++++ b/src/app/resources.ts
+@@ -1,0 +2 @@
++import type {} from '@deepseek-ai/dsh-session-query'
+@@ -115 +116 @@ async function transcript(host: ResourceHost, ticketId: string) {
+-  return (await host.context.sessionController.inspect(workerSessionId(ticketId) as SessionId)).events
++  return (await host.context.sessionQuery.readSession(workerSessionId(ticketId) as SessionId)).events
+diff --git a/src/app/role-models.ts b/src/app/role-models.ts
+index 5b01e6b..28d6770 100644
+--- a/src/app/role-models.ts
++++ b/src/app/role-models.ts
+@@ -19,24 +19 @@ export async function initializeRoleModel(ctx: Context, agent: Agent, model: Rol
+-  // Avoid selectModel because it mutates the global DSH default; inject the selection for the initial request only.
+-  agent.session.append('model/selection', selected)
+-  let initial = true
+-  let assembled: ModelSelection | undefined
+-  agent.ctx.effect(() => {
+-    const disposers = [
+-      agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+-        const selection = initial ? selected : undefined
+-        const result = await next()
+-        assembled = selection
+-        return selection ? { ...result, variables: { ...result.variables, provider: selection.provider, model: selection.model } } : result
+-      }, { prepend: true }),
+-      agent.ctx.on('agent/request', async (_payload, next) => {
+-        const result = await next()
+-        if (!assembled) return result
+-        const { reasoningEffort: _inherited, ...rest } = result
+-        return { ...rest, ...assembled }
+-      }, { prepend: true }),
+-      ctx.on('session/event', (session, event) => {
+-        if (session === agent.session && (event.type === 'request/header' || event.type === 'model/selection')) initial = false
+-      }),
+-    ]
+-    return () => disposers.forEach(dispose => dispose())
+-  })
++  agent.model.select(selected)
+diff --git a/src/client/deployment.tsx b/src/client/deployment.tsx
+index a345811..e614165 100644
+--- a/src/client/deployment.tsx
++++ b/src/client/deployment.tsx
+@@ -48,2 +48,2 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
+-  // Remote browsers (`memory` mode) are read-only; `unavailable` indicates `dsh-superagent` is still starting.
+-  const readOnlyHint = !form ? t('deploymentNoForms') : snapshot?.mode === 'memory' ? t('deploymentReadOnly')
++  // The Host reports whether this namespace is writable.
++  const readOnlyHint = !form ? t('deploymentNoForms')
+diff --git a/src/index.ts b/src/index.ts
+index 1889daf..f81fd12 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -8 +8 @@ export const name = 'dsh-superagent'
+-export const inject = ['agents', 'sessionController', 'sessionPersistence', 'workspaceRegistry', 'permissionPresets', 'tools', 'systemPrompt', 'skills', 'webServer', 'llm', 'subprocess']
++export const inject = ['agents', 'sessionController', 'sessionQuery', 'sessionPersistence', 'workspaceRegistry', 'permissionPresets', 'tools', 'systemPrompt', 'skills', 'webServer', 'llm', 'subprocess']
+diff --git a/tests/fixtures/host.ts b/tests/fixtures/host.ts
+index 70ace2e..db73182 100644
+--- a/tests/fixtures/host.ts
++++ b/tests/fixtures/host.ts
+@@ -227 +227 @@ export async function startRuntime(seed?: (store: Store) => void) {
+-      agents.set(sessionId, { id: sessionId, ctx: agentCtx, inbox, followup: deliver('queue'), steer: deliver('steer'), inject: vi.fn(), session, cancel,
++      agents.set(sessionId, { id: sessionId, ctx: agentCtx, model: { select: (value: unknown) => session.append('model/selection', value) }, inbox, followup: deliver('queue'), steer: deliver('steer'), inject: vi.fn(), session, cancel,
+@@ -241 +241 @@ export async function startRuntime(seed?: (store: Store) => void) {
+-  const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
++  const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller, sessionQuery: { readSession: (...args: unknown[]) => controller.inspect(...args as []) },
+diff --git a/tests/fixtures/panel-server.ts b/tests/fixtures/panel-server.ts
+index 513d91a..2353a17 100644
+--- a/tests/fixtures/panel-server.ts
++++ b/tests/fixtures/panel-server.ts
+@@ -460,2 +460 @@ export function fakeForm(writable = true, accept = true) {
+-    revision: 1, writable,
+-    mode: 'host' }
++    revision: 1, writable }
+diff --git a/tests/panel-deployment.spec.tsx b/tests/panel-deployment.spec.tsx
+index 33348ba..bf7f299 100644
+--- a/tests/panel-deployment.spec.tsx
++++ b/tests/panel-deployment.spec.tsx
+@@ -108 +108 @@ it('tells a dsh-superagent that is starting from a browser that cannot write on
+-  await act(async () => { publish({ mode: 'memory', status: 'unavailable', writable: false }) })
++  await act(async () => { publish({ status: 'ready', writable: false }) })
+diff --git a/tests/role-models.spec.ts b/tests/role-models.spec.ts
+index 1be1405..7355fe7 100644
+--- a/tests/role-models.spec.ts
++++ b/tests/role-models.spec.ts
+@@ -3,4 +3,3 @@ import { Context } from '@deepseek-ai/cordis'
+-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+-import { agentEvents, installModelSelection, type Agent, type ModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
++import { AgentModel, modelSelectionProjectionDefinition, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
++import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
++import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+@@ -11 +10,4 @@ async function fixture() {
+-  const ctx = new Context(); contexts.push(ctx); await ctx.plugin(SystemPrompt)
++  const ctx = new Context(); contexts.push(ctx)
++  await ctx.plugin(SessionStore)
++  await ctx.plugin(SessionProjectionRegistry)
++  const projection = await ctx.sessionProjections.register(modelSelectionProjectionDefinition)
+@@ -16,7 +18,9 @@ async function fixture() {
+-  const session = Session.create(SessionId('role-model'))
+-  const agent = { ctx, session } as Agent
+-  const host: ModelSelectionRef = { get current() { return session.requestHeader()?.config ?? { provider: 'host', model: 'default', reasoningEffort: ReasoningEffortId('high') } }, assembled: undefined }
+-  installModelSelection(ctx, host)
+-  const request = () => agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal: new AbortController().signal }, async () => ({ provider: 'seed', model: 'seed' }))
+-  const record = (selection: ModelSelection) => { const event = session.append('request/header', { header: { config: selection }, reason: 'initial' }); ctx.emit('session/event', session, event) }
+-  return { ctx, agent, host, resolve, flush, request, record }
++  const session = ctx.sessions.create(SessionId('role-model'))
++  const options = { provider: 'host', model: 'default' }
++  const model = new AgentModel(() => projection.stateOf(session), session, options)
++  const unused = (): never => { throw new Error('This fixture does not execute model calls') }
++  const agent: Agent = { ctx, session, model, id: session.id, options, status: 'idle',
++    get inbox() { return unused() }, cancel: unused, whenIdle: unused, runMaintenance: unused,
++    send: unused, followup: unused, steer: unused, inject: unused }
++  const record = (selection: ModelSelection) => session.append('request/header', { header: { config: selection }, reason: 'initial' })
++  return { ctx, agent, options, resolve, flush, record }
+@@ -24,7 +28,7 @@ async function fixture() {
+-it('keeps prompt variables and initial routing on the role model without saving the host default', async () => {
+-  const { ctx, agent, request, record, flush } = await fixture()
+-  await initializeRoleModel(ctx, agent, { provider: 'worker-provider', model: 'worker-model' })
+-  expect((await ctx.systemPrompt.assemble()).variables).toMatchObject({ provider: 'worker-provider', model: 'worker-model' })
+-  const selected = await request()
+-  expect(selected).toEqual({ provider: 'worker-provider', model: 'worker-model' })
+-  expect(agent.session.snapshotEvents().some(event => event.type === 'model/selection')).toBe(true)
++it('seeds only the role Session using the current Agent model API', async () => {
++  const { ctx, agent, options, flush, record } = await fixture()
++  const selected = { provider: 'worker-provider', model: 'worker-model' }
++  await initializeRoleModel(ctx, agent, selected)
++  expect(agent.model.current()).toEqual(selected)
++  expect(options).toEqual({ provider: 'host', model: 'default' })
++  expect(agent.session.snapshotEvents()).toMatchObject([{ type: 'model/selection', data: selected }])
+@@ -33,15 +37,3 @@ it('keeps prompt variables and initial routing on the role model without saving
+-  // A retry of the same assembled step keeps the same model even after the header is persisted.
+-  expect(await request()).toEqual(selected)
+-  await ctx.systemPrompt.assemble()
+-  expect(await request()).toEqual(selected)
+-})
+-it('lets a later explicit selection win without changing the in-flight assembled step', async () => {
+-  const { ctx, agent, host, request } = await fixture()
+-  await initializeRoleModel(ctx, agent, { provider: 'worker', model: 'one' })
+-  await ctx.systemPrompt.assemble()
+-  const manual = { provider: 'manual', model: 'two', reasoningEffort: ReasoningEffortId('low') }
+-  Object.defineProperty(host, 'current', { value: manual, configurable: true })
+-  const event = agent.session.append('model/selection', manual); ctx.emit('session/event', agent.session, event)
+-  expect(await request()).toEqual({ provider: 'worker', model: 'one' })
+-  await ctx.systemPrompt.assemble()
+-  expect(await request()).toEqual(manual)
++  expect(agent.model.current()).toEqual(selected)
++  agent.model.select({ provider: 'manual', model: 'two' })
++  expect(agent.model.current()).toEqual({ provider: 'manual', model: 'two' })
+@@ -53 +45 @@ it.each(['header', 'selection'])('preserves a resumed Session with existing %s',
+-  else agent.session.append('model/selection', existing)
++  else agent.model.select(existing)
+@@ -55,0 +48 @@ it.each(['header', 'selection'])('preserves a resumed Session with existing %s',
++  expect(agent.model.current()).toEqual(existing)
+@@ -57,2 +50,2 @@ it.each(['header', 'selection'])('preserves a resumed Session with existing %s',
+-it('inherits the host when unset and fails unavailable routes before recording a selection', async () => {
+-  const { ctx, agent, resolve, request } = await fixture()
++it('inherits the host when unset and refuses an unavailable route before recording', async () => {
++  const { ctx, agent, resolve } = await fixture()
+@@ -60,2 +53 @@ it('inherits the host when unset and fails unavailable routes before recording a
+-  await ctx.systemPrompt.assemble()
+-  expect(await request()).toMatchObject({ provider: 'host', model: 'default' })
++  expect(agent.model.current()).toEqual({ provider: 'host', model: 'default' })
+diff --git a/tests/runtime.spec.ts b/tests/runtime.spec.ts
+index fd737f2..89e28b8 100644
+--- a/tests/runtime.spec.ts
++++ b/tests/runtime.spec.ts
+@@ -0,0 +1 @@
++import { SessionId } from '@deepseek-ai/dsh-session'
+@@ -198 +199 @@ beforeEach(async () => {
+-      agents.set(sessionId, { id: sessionId, ctx: agentCtx, inbox, followup: deliver('queue'), steer: deliver('steer'), status: 'idle', inject: vi.fn(), session: { id: sessionId, header: { agentPreset }, snapshotEvents: () => modelEvents, requestHeader: () => undefined, append: vi.fn((type: string, data: unknown) => { modelEvents.push({ type, data }) }) }, cancel: vi.fn(), whenIdle: async () => {} } as never)
++      agents.set(sessionId, { id: sessionId, ctx: agentCtx, model: { select: (value: unknown) => modelEvents.push({ type: 'model/selection', data: value }) }, inbox, followup: deliver('queue'), steer: deliver('steer'), status: 'idle', inject: vi.fn(), session: { id: sessionId, header: { agentPreset }, snapshotEvents: () => modelEvents, requestHeader: () => undefined, append: vi.fn((type: string, data: unknown) => { modelEvents.push({ type, data }) }) }, cancel: vi.fn(), whenIdle: async () => {} } as never)
+@@ -206 +207 @@ beforeEach(async () => {
+-  services = { agents, llm: { resolveCallConfig: vi.fn(async value => value) }, sessionController: controller, sessionPersistence: { flush: vi.fn(async () => {}), open: vi.fn(async () => ({ read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} })) }, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer: { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }, jobs: jobs.service }
++  services = { agents, llm: { resolveCallConfig: vi.fn(async value => value) }, sessionController: controller, sessionQuery: { readSession: controller.inspect }, sessionPersistence: { flush: vi.fn(async () => {}), open: vi.fn(async () => ({ read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} })) }, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer: { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }, jobs: jobs.service }
+@@ -1692 +1693 @@ it('selects its own preset again for a main Session or worker a person switched
+-  const emit = (sessionId: string, preset: string) => (runtime as unknown as { ctx: Context }).ctx.emit('agent-preset/selected', sessionId, preset)
++  const emit = (sessionId: string, preset: string) => (runtime as unknown as { ctx: Context }).ctx.emit('agent-preset/selected', SessionId(sessionId), preset)
+diff --git a/tests/sources.spec.ts b/tests/sources.spec.ts
+index f4d0332..da39fff 100644
+--- a/tests/sources.spec.ts
++++ b/tests/sources.spec.ts
+@@ -1092 +1092,2 @@ describe('feishu event consumer', () => {
+-    const { ctx, health, store } = consumerSource(cli('events'))
++    const { ctx, store } = consumerSource(cli('events'))
++    const report = vi.spyOn(ctx, 'report')
+@@ -1097 +1098 @@ describe('feishu event consumer', () => {
+-    expect(health.feishu).toMatchObject({ state: 'error', detail: expect.stringContaining('JSON') })
++    expect(report).toHaveBeenCalledWith('feishu', { state: 'error', detail: expect.stringContaining('JSON') })

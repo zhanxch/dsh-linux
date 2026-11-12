@@ -1,7 +1,7 @@
 /** Prepare Desktop resources and publish their versions after every preparation stage succeeds. */
 
 import { execFileSync } from 'node:child_process'
-import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -23,11 +23,16 @@ type DesktopTarget = ReturnType<typeof desktopTargetPlatform>
 async function prepareElectron({ platform, arch }: DesktopTarget): Promise<string> {
   const require = createRequire(import.meta.url)
   const { version } = require('electron/package.json') as { version: string }
+  const checksumPin = platform === 'linux'
+    ? JSON.parse(readFileSync(join(import.meta.dirname, '../../../linux/electron-checksums.json'), 'utf8')) as { version: string; checksums: Record<string, string> }
+    : undefined
+  if (checksumPin !== undefined && checksumPin.version !== version) throw new Error('Update linux/electron-checksums.json for the selected Electron version')
   const archive = await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'download:electron',
-    () => downloadArtifact({ version, platform, arch, artifactName: 'electron', cacheRoot: BUILD_PATHS.downloads }))
+    () => downloadArtifact({ version, platform, arch, artifactName: 'electron', cacheRoot: BUILD_PATHS.downloads,
+      ...checksumPin === undefined ? {} : { checksums: checksumPin.checksums } }))
   rmSync(BUILD_PATHS.electron, { recursive: true, force: true })
   await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'extract:electron', () => extractZip(archive, { dir: BUILD_PATHS.electron }))
-  const executable = join(BUILD_PATHS.electron, platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
+  const executable = join(BUILD_PATHS.electron, platform === 'win32' ? 'electron.exe' : platform === 'linux' ? 'electron' : 'Electron.app/Contents/MacOS/Electron')
   return execFileSync(executable, ['-p', 'process.versions.node'], {
     encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
   }).trim()

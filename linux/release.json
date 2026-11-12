@@ -1,0 +1,11 @@
+{
+  "upstreamRepository": "https://github.com/deepseek-ai/deepseek-harness",
+  "upstreamCommit": "e8f7b93a344964de3dca1ace9e72b6e4d6de87cb",
+  "upstreamVersion": "0.2.2-rc.2",
+  "revision": 1,
+  "superagent": {
+    "repository": "https://github.com/deepseek-ai/dsh-superagent-prototype.git",
+    "commit": "8c32a9dc5d72c033816c6a8110b37f40cf94fba4",
+    "version": "0.1.0-linux.1"
+  }
+}

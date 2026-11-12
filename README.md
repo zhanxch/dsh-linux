@@ -8,6 +8,14 @@ It is built on an **everything-is-a-plugin** architecture and powered by [Cordis
 
 Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
+## Linux desktop distribution
+
+This repository maintains a community Linux build of the official DSH desktop application, preserving its conversation interface, modes, plugins, and bundled runtime. It is maintained by zhanxch and is not an official DeepSeek binary release.
+
+**[Download Linux desktop packages](https://github.com/zhanxch/dsh-linux/releases)** · [Install and build](linux/README.md) · [Super-agent integration](linux/superagent.md)
+
+The source versions are pinned in [linux/release.json](linux/release.json). Super-agent is the separate DeepSeek research prototype; this distribution supplies a compatibility patch and an optional plugin package.
+
 ## Developer preview
 
 DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
